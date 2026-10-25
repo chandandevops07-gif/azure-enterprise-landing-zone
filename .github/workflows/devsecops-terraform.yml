@@ -1,0 +1,55 @@
+name: "Enterprise DevSecOps IaC Pipeline"
+
+on:
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - "modules/**"
+      - "environments/**"
+  push:
+    branches: [ "main" ]
+    paths:
+      - "modules/**"
+      - "environments/**"
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+
+jobs:
+  validate-and-security:
+    name: "Lint, Security & Cost Estimation"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.8.0
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+
+      - name: Run TFLint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: latest
+
+      - name: Run Checkov Static Analysis (CIS Azure Benchmark)
+        uses: bridgecrewio/checkov-action@master
+        with:
+          framework: terraform
+          output_format: cli
+          soft_fail: false
+
+      - name: Setup Infracost (FinOps Cost Diff)
+        uses: infracost/actions/setup@v3
+        with:
+          api-key: ${{ secrets.INFRACOST_API_KEY }}
+
+      - name: Generate Infracost Baseline
+        run: |
+          infracost breakdown --path=environments/prod --format=json --out-file=/tmp/infracost.json
